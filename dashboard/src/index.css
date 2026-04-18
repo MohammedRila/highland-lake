@@ -1,0 +1,16 @@
+/* Tailwind v4 Imports */
+@import "tailwindcss";
+
+@theme {
+  --color-gold-500: #ffd700;
+  --color-gold-600: #e6c200;
+  --color-gold-700: #ccad00;
+}
+
+@layer base {
+  body {
+    background-color: #121212;
+    color: #f5f5f5;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}

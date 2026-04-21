@@ -7,8 +7,10 @@ import { sendSms } from '../services/sms';
 export const handleIncomingSms = asyncHandler(async (req: Request, res: Response) => {
     // Twilio sends data as URL-encoded form data
     const { From, Body } = req.body;
+    console.log(`[Twilio SMS] Received inbound from ${From}: "${Body}"`);
 
     if (!From || !Body) {
+        console.warn('[Twilio SMS] Missing From or Body in request');
         res.status(400).send('Missing From or Body in incoming SMS webhook');
         return;
     }
@@ -33,10 +35,12 @@ export const handleIncomingSms = asyncHandler(async (req: Request, res: Response
             content: c.message
         }));
 
-    // 4. Generate reply using Claude
+    // 4. Generate reply using Claude (Groq)
+    console.log(`[Twilio SMS] Generating AI reply for ${customerPhone}...`);
     const aiReply = await generateReply(history, incomingText);
+    console.log(`[Twilio SMS] AI generated reply: "${aiReply.substring(0, 50)}..."`);
 
-    // 5. Send reply via Twilio (Automation 1 execution)
+    // 5. Send reply via Twilio
     await sendSms(customerPhone, aiReply);
 
     // 6. Log the outbound conversation
@@ -45,14 +49,17 @@ export const handleIncomingSms = asyncHandler(async (req: Request, res: Response
     // 7. Update lead's last_contact timestamp
     await updateLeadLastContact(lead.id);
 
-    // Respond to Twilio so it knows webhook was received successfully
+    console.log(`[Twilio SMS] Flow complete for ${customerPhone}`);
+    // Respond to Twilio
     res.status(200).send('<Response></Response>');
 });
 
 export const handleMissedCall = asyncHandler(async (req: Request, res: Response) => {
     const { From } = req.body;
+    console.log(`[Twilio Call] Received call webhook from ${From}`);
 
     if (!From) {
+        console.warn('[Twilio Call] Missing From in missed call webhook');
         res.status(400).send('Missing From in missed call webhook');
         return;
     }

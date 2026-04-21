@@ -17,6 +17,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 // Routes
+app.get('/', (req, res) => {
+    res.status(200).send('Highland Lake Customs API is Running 🚀');
+});
+
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });

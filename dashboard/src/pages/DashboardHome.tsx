@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
-import { Users, CalendarCheck, TrendingUp, CheckCircle, Clock, Loader2 } from 'lucide-react';
+import { Users, CalendarCheck, TrendingUp, CheckCircle, Clock } from 'lucide-react';
 
 interface Lead {
   id: string;

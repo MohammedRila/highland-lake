@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
-import { Send, User as UserIcon, Bot, RefreshCw } from 'lucide-react';
+import { Send, User as UserIcon, Bot } from 'lucide-react';
 
 interface Conversation {
   id: string;

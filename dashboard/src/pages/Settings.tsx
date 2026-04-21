@@ -3,11 +3,6 @@ import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { Save, Settings as SettingsIcon, Link as LinkIcon, Clock, DollarSign, Brain } from 'lucide-react';
 
-interface Config {
-  key: string;
-  value: string;
-}
-
 export default function Settings() {
   const [configs, setConfigs] = useState<Record<string, string>>({
     google_review_link: '',

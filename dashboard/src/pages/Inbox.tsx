@@ -160,7 +160,6 @@ export default function Inbox() {
         {selectedLead ? (
           <>
             <div className="p-4 border-b border-[#333] bg-[#1a1a1a] shadow-sm flex items-center justify-between">
-              <div>
               <div className="flex items-center justify-between flex-1">
                 <div>
                   <h3 className="font-semibold text-white text-lg">{selectedLead.name || selectedLead.phone}</h3>

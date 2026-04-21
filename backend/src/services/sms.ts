@@ -8,6 +8,13 @@ const businessPhoneNumber = process.env.TWILIO_PHONE_NUMBER || '';
 
 const client = twilio(accountSid, authToken);
 
+// Diagnostic log for Render debugging
+if (accountSid) {
+    console.log(`[Twilio Service] Initialized with Account SID: ${accountSid.substring(0, 6)}...`);
+} else {
+    console.warn('[Twilio Service] WARNING: TWILIO_ACCOUNT_SID is not set!');
+}
+
 export const sendSms = async (to: string, body: string) => {
     try {
         const message = await client.messages.create({

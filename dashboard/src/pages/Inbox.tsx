@@ -76,28 +76,36 @@ export default function Inbox() {
     const toastId = toast.loading('Sending reply...');
     
     try {
-      // 1. Insert into DB
-      const newMessage = {
-        lead_id: leadId,
-        direction: 'outbound' as const,
-        message: replyText
-      };
+      // 1. Call your Render backend to send the actual SMS
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://highland-lake.onrender.com'}/api/messages/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          leadId,
+          message: replyText
+        })
+      });
 
-      const { data, error } = await supabase
-        .from('conversations')
-        .insert([newMessage])
-        .select();
-
-      if (error) throw error;
-
-      // 2. Clear input and update UI
-      if (data) {
-        setConversations([...conversations, data[0]]);
-        setReplyText('');
-        toast.success('Reply sent!', { id: toastId });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to send message');
       }
+
+      // 2. Clear input and update UI (The backend logs the convo, so we just local update here)
+      setConversations([...conversations, {
+        id: Date.now().toString(),
+        direction: 'outbound' as const,
+        message: replyText,
+        sent_at: new Date().toISOString()
+      }]);
+      setReplyText('');
+      toast.success('Message delivered! 📱', { id: toastId });
+
     } catch (error: any) {
-      toast.error('Failed to send reply: ' + error.message, { id: toastId });
+      console.error('Send error:', error);
+      toast.error(error.message, { id: toastId });
     }
   };
 

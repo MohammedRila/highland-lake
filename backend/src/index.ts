@@ -26,7 +26,9 @@ app.get('/health', (req, res) => {
 });
 
 import { markJobComplete } from './controllers/jobs';
+import { manualSendSms } from './controllers/messages';
 app.post('/api/jobs/:leadId/complete', markJobComplete);
+app.post('/api/messages/send', manualSendSms);
 
 // Twilio Webhooks
 app.post('/api/webhooks/twilio/sms', handleIncomingSms);

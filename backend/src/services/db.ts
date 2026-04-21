@@ -16,6 +16,7 @@ export interface Lead {
     status: string;
     source: string;
     notes?: string;
+    ai_enabled: boolean;
 }
 
 export interface Conversation {

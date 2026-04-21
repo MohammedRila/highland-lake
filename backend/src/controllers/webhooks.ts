@@ -35,16 +35,20 @@ export const handleIncomingSms = asyncHandler(async (req: Request, res: Response
             content: c.message
         }));
 
-    // 4. Generate reply using Claude (Groq)
-    console.log(`[Twilio SMS] Generating AI reply for ${customerPhone}...`);
-    const aiReply = await generateReply(history, incomingText);
-    console.log(`[Twilio SMS] AI generated reply: "${aiReply.substring(0, 50)}..."`);
+    // 4. Generate reply using Claude (Groq) IF AI is enabled
+    if (lead.ai_enabled !== false) {
+        console.log(`[Twilio SMS] Generating AI reply for ${customerPhone}...`);
+        const aiReply = await generateReply(history, incomingText);
+        console.log(`[Twilio SMS] AI generated reply: "${aiReply.substring(0, 50)}..."`);
 
-    // 5. Send reply via Twilio
-    await sendSms(customerPhone, aiReply);
+        // 5. Send reply via Twilio
+        await sendSms(customerPhone, aiReply);
 
-    // 6. Log the outbound conversation
-    await logConversation(lead.id, 'outbound', aiReply);
+        // 6. Log the outbound conversation
+        await logConversation(lead.id, 'outbound', aiReply);
+    } else {
+        console.log(`[Twilio SMS] AI is DISABLED for lead ${lead.id}. Skipping automatic response.`);
+    }
 
     // 7. Update lead's last_contact timestamp
     await updateLeadLastContact(lead.id);

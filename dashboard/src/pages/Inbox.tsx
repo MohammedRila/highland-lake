@@ -15,6 +15,7 @@ interface Lead {
   id: string;
   phone: string;
   name: string | null;
+  ai_enabled: boolean;
 }
 
 export default function Inbox() {
@@ -42,7 +43,7 @@ export default function Inbox() {
   const fetchLeads = async () => {
     const { data } = await supabase
       .from('leads')
-      .select('id, phone, name')
+      .select('id, phone, name, ai_enabled')
       .order('last_contact', { ascending: false });
     
     if (data) {
@@ -109,6 +110,28 @@ export default function Inbox() {
     }
   };
 
+  const toggleAi = async () => {
+    if (!selectedLead) return;
+    
+    const newState = !selectedLead.ai_enabled;
+    const toastId = toast.loading(`Turning AI ${newState ? 'ON' : 'OFF'}...`);
+
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({ ai_enabled: newState })
+        .eq('id', selectedLead.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setLeads(leads.map(l => l.id === selectedLead.id ? { ...l, ai_enabled: newState } : l));
+      toast.success(`AI assistant is now ${newState ? 'ENABLED' : 'DISABLED'} for this lead`, { id: toastId });
+    } catch (error: any) {
+      toast.error('Failed to update AI status: ' + error.message, { id: toastId });
+    }
+  };
+
   const selectedLead = leads.find(l => l.id === leadId);
 
   return (
@@ -138,8 +161,32 @@ export default function Inbox() {
           <>
             <div className="p-4 border-b border-[#333] bg-[#1a1a1a] shadow-sm flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-white text-lg">{selectedLead.name || selectedLead.phone}</h3>
-                <p className="text-sm text-gold-500">Active Conversation</p>
+              <div className="flex items-center justify-between flex-1">
+                <div>
+                  <h3 className="font-semibold text-white text-lg">{selectedLead.name || selectedLead.phone}</h3>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${selectedLead.ai_enabled ? 'bg-green-500' : 'bg-gray-500'}`}></div>
+                    <p className="text-sm text-gray-400">
+                      {selectedLead.ai_enabled ? 'AI Assistant is Active' : 'Manual Mode'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 bg-[#222] p-2 rounded-lg border border-[#333]">
+                  <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">AI Reply</span>
+                  <button
+                    onClick={toggleAi}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                      selectedLead.ai_enabled ? 'bg-gold-500' : 'bg-gray-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        selectedLead.ai_enabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
             </div>
 

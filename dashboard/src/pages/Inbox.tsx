@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Send, User as UserIcon, Bot } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { Send, User as UserIcon, Bot, RefreshCw } from 'lucide-react';
 
 interface Conversation {
   id: string;
@@ -54,35 +55,49 @@ export default function Inbox() {
   };
 
   const fetchConversations = async (id: string) => {
-    const { data } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('lead_id', id)
-      .order('sent_at', { ascending: true });
-    
-    if (data) setConversations(data);
+    try {
+      const { data, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('lead_id', id)
+        .order('sent_at', { ascending: true });
+      
+      if (error) throw error;
+      if (data) setConversations(data);
+    } catch (error: any) {
+      toast.error('Failed to load messages: ' + error.message);
+    }
   };
 
   const handleSendReply = async (e: FormEvent) => {
     e.preventDefault();
     if (!replyText.trim() || !leadId) return;
 
-    // Typically this would call your backend API to send the SMS via Twilio
-    // For now we just mock insert into DB so the UI updates
-    const newMessage = {
-      lead_id: leadId,
-      direction: 'outbound' as const,
-      message: replyText
-    };
+    const toastId = toast.loading('Sending reply...');
+    
+    try {
+      // 1. Insert into DB
+      const newMessage = {
+        lead_id: leadId,
+        direction: 'outbound' as const,
+        message: replyText
+      };
 
-    const { data, error } = await supabase
-      .from('conversations')
-      .insert([newMessage])
-      .select();
+      const { data, error } = await supabase
+        .from('conversations')
+        .insert([newMessage])
+        .select();
 
-    if (!error && data) {
-      setConversations([...conversations, data[0]]);
-      setReplyText('');
+      if (error) throw error;
+
+      // 2. Clear input and update UI
+      if (data) {
+        setConversations([...conversations, data[0]]);
+        setReplyText('');
+        toast.success('Reply sent!', { id: toastId });
+      }
+    } catch (error: any) {
+      toast.error('Failed to send reply: ' + error.message, { id: toastId });
     }
   };
 

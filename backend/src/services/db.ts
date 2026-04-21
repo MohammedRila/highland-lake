@@ -96,3 +96,20 @@ export const updateLeadLastContact = async (leadId: string) => {
          console.error('Error updating lead last_contact:', error);
     }
 };
+
+export const getConfigurations = async (): Promise<Record<string, string>> => {
+    const { data, error } = await supabase
+        .from('configurations')
+        .select('key, value');
+
+    if (error) {
+        console.error('Error fetching configurations:', error);
+        return {};
+    }
+
+    const config: Record<string, string> = {};
+    data.forEach(item => {
+        config[item.key] = item.value;
+    });
+    return config;
+};

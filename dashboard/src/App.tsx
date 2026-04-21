@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { supabase } from './lib/supabase';
-import { LayoutDashboard, MessageSquare, LogOut, Loader2 } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Settings as SettingsIcon, LogOut, Loader2 } from 'lucide-react';
+import { Toaster } from 'react-hot-toast';
 import Login from './pages/Login';
 import DashboardHome from './pages/DashboardHome';
 import Inbox from './pages/Inbox';
+import Settings from './pages/Settings';
 
 const App = () => {
   const [session, setSession] = useState<any>(null);
@@ -35,6 +37,7 @@ const App = () => {
 
   return (
     <Router>
+      <Toaster position="top-right" />
       <Routes>
         <Route 
           path="/login" 
@@ -65,6 +68,10 @@ const App = () => {
                       <MessageSquare size={20} />
                       Inbox
                     </Link>
+                    <Link to="/settings" className="flex items-center gap-3 px-3 py-2 text-gray-300 hover:text-white hover:bg-[#333] rounded-md transition-colors">
+                      <SettingsIcon size={20} />
+                      Settings
+                    </Link>
                   </nav>
 
                   <div className="p-4 border-t border-[#333]">
@@ -84,6 +91,7 @@ const App = () => {
                     <Route path="/" element={<DashboardHome />} />
                     <Route path="/inbox" element={<Inbox />} />
                     <Route path="/inbox/:leadId" element={<Inbox />} />
+                    <Route path="/settings" element={<Settings />} />
                   </Routes>
                 </div>
               </div>

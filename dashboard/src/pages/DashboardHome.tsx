@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Users, CalendarCheck, TrendingUp, CheckCircle, Clock } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { Users, CalendarCheck, TrendingUp, CheckCircle, Clock, Loader2 } from 'lucide-react';
 
 interface Lead {
   id: string;
@@ -20,29 +21,43 @@ export default function DashboardHome() {
   }, []);
 
   const fetchLeads = async () => {
-    const { data } = await supabase
-      .from('leads')
-      .select('*')
-      .order('last_contact', { ascending: false })
-      .limit(20);
-    
-    if (data) setLeads(data);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*')
+        .order('last_contact', { ascending: false })
+        .limit(20);
+      
+      if (error) throw error;
+      if (data) setLeads(data);
+    } catch (error: any) {
+      toast.error('Failed to fetch leads: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const markJobComplete = async (leadId: string) => {
-    // Update lead status to complete
-    await supabase.from('leads').update({ status: 'complete' }).eq('id', leadId);
-    
-    // Create the completed job record for Automation 4 (Review Request)
-    await supabase.from('jobs').insert([{
-      lead_id: leadId,
-      status: 'complete',
-      review_sent: false,
-      completed_at: new Date().toISOString()
-    }]);
+    const toastId = toast.loading('Marking job as complete...');
+    try {
+      // 1. Update lead status to complete
+      const { error: leadErr } = await supabase.from('leads').update({ status: 'complete' }).eq('id', leadId);
+      if (leadErr) throw leadErr;
+      
+      // 2. Create the completed job record
+      const { error: jobErr } = await supabase.from('jobs').insert([{
+        lead_id: leadId,
+        status: 'complete',
+        review_sent: false,
+        completed_at: new Date().toISOString()
+      }]);
+      if (jobErr) throw jobErr;
 
-    fetchLeads();
+      toast.success('Job marked complete! Automation triggered.', { id: toastId });
+      fetchLeads();
+    } catch (error: any) {
+      toast.error('Failed to update job: ' + error.message, { id: toastId });
+    }
   };
 
   return (

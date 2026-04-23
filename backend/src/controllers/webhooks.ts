@@ -91,3 +91,43 @@ export const handleMissedCall = asyncHandler(async (req: Request, res: Response)
     // Respond to Twilio
     res.status(200).send('<Response></Response>');
 });
+
+/**
+ * Mobile Hook (For personal numbers WITHOUT Twilio)
+ * This endpoint is called by an app on your phone (like Tasker).
+ */
+export const handleMobileSms = asyncHandler(async (req: Request, res: Response) => {
+    // Making it robust to different mobile app payload formats (Tasker, AutoWeb, IFTTT, MacroDroid, etc.)
+    const from = req.body.From || req.body.from || req.body.phone || req.body.sender || req.body.address;
+    const body = req.body.Body || req.body.body || req.body.message || req.body.text || req.body.msg || req.body.content;
+
+    console.log(`[Mobile Hook] Incoming payload:`, JSON.stringify(req.body));
+
+    if (!from || !body) {
+        console.warn('[Mobile Hook] Missing sender or message body in request');
+        res.status(400).json({ error: 'Missing from/body/message in request' });
+        return;
+    }
+
+    const lead = await getOrCreateLead(from, 'mobile');
+    await logConversation(lead.id, 'inbound', body);
+
+    const recentConvos = await getRecentConversations(lead.id, 10);
+    const history: ConversationMessage[] = recentConvos
+        .filter(c => c.message !== body)
+        .map(c => ({
+            role: c.direction === 'inbound' ? 'user' : 'assistant',
+            content: c.message
+        }));
+
+    let reply = "Got it. Let me check on that for you.";
+    
+    if (lead.ai_enabled !== false) {
+        reply = await generateReply(history, body);
+        await logConversation(lead.id, 'outbound', reply);
+    }
+
+    await updateLeadLastContact(lead.id);
+
+    res.status(200).json({ reply });
+});

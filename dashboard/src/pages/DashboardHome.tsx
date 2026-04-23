@@ -61,7 +61,7 @@ export default function DashboardHome() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       <h2 className="text-2xl font-bold text-white mb-6">Overview</h2>
       
       {/* Stats row */}

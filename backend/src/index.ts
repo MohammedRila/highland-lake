@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { handleIncomingSms, handleMissedCall } from './controllers/webhooks';
+import { handleIncomingSms, handleMissedCall, handleMobileSms } from './controllers/webhooks';
 import { initCronJobs } from './services/cron';
+import { markJobComplete } from './controllers/jobs';
+import { manualSendSms } from './controllers/messages';
 
 dotenv.config();
 
@@ -11,9 +13,7 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-// Need express.urlencoded to parse Twilio webhooks specifically which are form-urlencoded
 app.use(express.urlencoded({ extended: true }));
-// Use JSON parser for regular API endpoints (if adding a dashboard API later)
 app.use(express.json());
 
 // Routes
@@ -25,14 +25,14 @@ app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
 
-import { markJobComplete } from './controllers/jobs';
-import { manualSendSms } from './controllers/messages';
+// API Routes
 app.post('/api/jobs/:leadId/complete', markJobComplete);
 app.post('/api/messages/send', manualSendSms);
 
-// Twilio Webhooks
+// Webhooks
 app.post('/api/webhooks/twilio/sms', handleIncomingSms);
 app.post('/api/webhooks/twilio/missed-call', handleMissedCall);
+app.post('/api/webhooks/mobile/sms', handleMobileSms);
 
 // Start Server
 app.listen(PORT, () => {

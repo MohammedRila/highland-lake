@@ -77,15 +77,15 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-8">
-        <SettingsIcon className="text-gold-500" size={32} />
-        <h2 className="text-3xl font-bold text-white">System Settings</h2>
+    <div className="p-4 md:p-8 max-w-4xl mx-auto">
+      <div className="flex items-center gap-3 mb-6 md:mb-8">
+        <SettingsIcon className="text-gold-500" size={26} />
+        <h2 className="text-2xl md:text-3xl font-bold text-white">System Settings</h2>
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-4 md:space-y-8 pb-24 md:pb-0">
         {/* Google Review Section */}
-        <section className="bg-[#1a1a1a] p-6 rounded-xl border border-[#333] shadow-lg">
+        <section className="bg-[#1a1a1a] p-4 md:p-6 rounded-xl border border-[#333] shadow-lg">
           <div className="flex items-center gap-2 mb-4 text-gold-500">
             <LinkIcon size={20} />
             <h3 className="font-semibold text-lg">Review Automation</h3>
@@ -96,7 +96,7 @@ export default function Settings() {
               type="text"
               value={configs.google_review_link}
               onChange={(e) => handleChange('google_review_link', e.target.value)}
-              className="w-full bg-[#222] border border-[#444] text-white p-3 rounded-lg focus:ring-2 focus:ring-gold-500 outline-none transition-all"
+              className="w-full bg-[#222] border border-[#444] text-white p-3.5 rounded-lg focus:ring-2 focus:ring-gold-500 outline-none transition-all text-base"
               placeholder="https://g.page/r/..."
             />
             <p className="mt-2 text-xs text-gray-500">The AI will automatically drop this link when customers say thank you or show satisfaction.</p>
@@ -104,7 +104,7 @@ export default function Settings() {
         </section>
 
         {/* Business Info Section */}
-        <section className="bg-[#1a1a1a] p-6 rounded-xl border border-[#333] shadow-lg">
+        <section className="bg-[#1a1a1a] p-4 md:p-6 rounded-xl border border-[#333] shadow-lg">
           <div className="flex items-center gap-2 mb-4 text-gold-500">
             <Clock size={20} />
             <h3 className="font-semibold text-lg">Business Information</h3>
@@ -115,14 +115,14 @@ export default function Settings() {
               type="text"
               value={configs.business_hours}
               onChange={(e) => handleChange('business_hours', e.target.value)}
-              className="w-full bg-[#222] border border-[#444] text-white p-3 rounded-lg focus:ring-2 focus:ring-gold-500 outline-none transition-all"
+              className="w-full bg-[#222] border border-[#444] text-white p-3.5 rounded-lg focus:ring-2 focus:ring-gold-500 outline-none transition-all text-base"
               placeholder="e.g. Mon-Sat, 8:00 AM - 7:00 PM"
             />
           </div>
         </section>
 
         {/* Pricing Section */}
-        <section className="bg-[#1a1a1a] p-6 rounded-xl border border-[#333] shadow-lg">
+        <section className="bg-[#1a1a1a] p-4 md:p-6 rounded-xl border border-[#333] shadow-lg">
           <div className="flex items-center gap-2 mb-4 text-gold-500">
             <DollarSign size={20} />
             <h3 className="font-semibold text-lg">Pricing & Services</h3>
@@ -133,14 +133,14 @@ export default function Settings() {
               rows={5}
               value={configs.pricing_info}
               onChange={(e) => handleChange('pricing_info', e.target.value)}
-              className="w-full bg-[#222] border border-[#444] text-white p-3 rounded-lg focus:ring-2 focus:ring-gold-500 outline-none transition-all resize-none"
+              className="w-full bg-[#222] border border-[#444] text-white p-3.5 rounded-lg focus:ring-2 focus:ring-gold-500 outline-none transition-all resize-none text-base"
               placeholder="Enter your tiers and prices here..."
             />
           </div>
         </section>
 
         {/* AI Behavior Section */}
-        <section className="bg-[#1a1a1a] p-6 rounded-xl border border-[#333] shadow-lg">
+        <section className="bg-[#1a1a1a] p-4 md:p-6 rounded-xl border border-[#333] shadow-lg">
           <div className="flex items-center gap-2 mb-4 text-gold-500">
             <Brain size={20} />
             <h3 className="font-semibold text-lg">AI Persona & Tone</h3>
@@ -151,17 +151,17 @@ export default function Settings() {
               rows={4}
               value={configs.ai_persona}
               onChange={(e) => handleChange('ai_persona', e.target.value)}
-              className="w-full bg-[#222] border border-[#444] text-white p-3 rounded-lg focus:ring-2 focus:ring-gold-500 outline-none transition-all resize-none"
+              className="w-full bg-[#222] border border-[#444] text-white p-3.5 rounded-lg focus:ring-2 focus:ring-gold-500 outline-none transition-all resize-none text-base"
               placeholder="How should the AI introduce itself and talk?"
             />
           </div>
         </section>
 
-        <div className="flex justify-end pt-4">
+        <div className="flex justify-end pt-2 md:pt-4 md:static fixed left-0 right-0 bottom-0 z-30 p-3 md:p-0 bg-[#121212]/95 md:bg-transparent border-t border-[#333] md:border-0 backdrop-blur md:backdrop-blur-none safe-area-bottom">
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 bg-gold-500 hover:bg-gold-600 disabled:bg-gray-700 text-black font-bold py-3 px-8 rounded-lg transition-all shadow-lg active:scale-95"
+            className="w-full sm:w-auto min-h-12 justify-center flex items-center gap-2 bg-gold-500 hover:bg-gold-600 disabled:bg-gray-700 text-black font-bold py-3 px-6 md:px-8 rounded-lg transition-all shadow-lg active:scale-95"
           >
             {saving ? (
               <span className="flex items-center gap-2">

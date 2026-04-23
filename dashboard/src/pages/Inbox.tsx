@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { Send, User as UserIcon, Bot, ArrowLeft, MessageSquare } from 'lucide-react';
+import { logAuditEvent } from '../lib/audit';
 
 interface Conversation {
   id: string;
@@ -119,6 +120,12 @@ export default function Inbox() {
       if (error) throw error;
 
       setLeads(leads.map(l => l.id === selectedLead.id ? { ...l, ai_enabled: newState } : l));
+      await logAuditEvent({
+        action: 'lead_ai_toggled',
+        targetType: 'lead',
+        targetId: selectedLead.id,
+        metadata: { ai_enabled: newState }
+      });
       toast.success(`AI assistant is now ${newState ? 'ENABLED' : 'DISABLED'} for this lead`, { id: toastId });
     } catch (error: any) {
       toast.error('Failed to update AI status: ' + error.message, { id: toastId });

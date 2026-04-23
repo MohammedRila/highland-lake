@@ -14,12 +14,15 @@ async function testAI() {
     console.log("User: " + latestMessage);
     
     try {
-        const reply = await generateReply(history, latestMessage);
+        const result = await generateReply(history, latestMessage);
+        const reply = result.reply;
         console.log("David: " + reply);
         
         const hasEmoji = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u.test(reply);
         if (hasEmoji) {
             console.log("\n❌ FAILED: Emoji detected in response.");
+        } else if (result.requiresManualReview) {
+            console.log("\n⚠️ REVIEW: Guardrails flagged this response for manual review.");
         } else {
             console.log("\n✅ PASSED: Persona is casual and emoji-free.");
         }

@@ -1,9 +1,12 @@
 import { Request, Response } from 'express';
 import asyncHandler from 'express-async-handler';
-import { supabase } from '../services/db';
+import { supabase, logAuditEvent } from '../services/db';
+
+const headerValue = (value: string | string[] | undefined): string | undefined =>
+    Array.isArray(value) ? value[0] : value;
 
 export const markJobComplete = asyncHandler(async (req: Request, res: Response) => {
-    const { leadId } = req.params;
+    const leadId = headerValue(req.params.leadId);
 
     if (!leadId) {
         res.status(400).send('Missing leadId');
@@ -38,6 +41,15 @@ export const markJobComplete = asyncHandler(async (req: Request, res: Response) 
          res.status(500).send('Error recording completed job');
          return;
     }
+
+    await logAuditEvent({
+        actor_id: headerValue(req.headers['x-actor-id']),
+        actor_type: 'user',
+        action: 'lead_status_changed',
+        target_type: 'lead',
+        target_id: leadId,
+        metadata: { new_status: 'complete', source: 'mark_job_complete' }
+    });
 
     res.status(200).json({ success: true });
 });

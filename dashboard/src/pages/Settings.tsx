@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { Save, Settings as SettingsIcon, Link as LinkIcon, Clock, DollarSign, Brain } from 'lucide-react';
+import { logAuditEvent } from '../lib/audit';
 
 export default function Settings() {
   const [configs, setConfigs] = useState<Record<string, string>>({
@@ -54,6 +55,11 @@ export default function Settings() {
         .upsert(updates, { onConflict: 'key' });
 
       if (error) throw error;
+      await logAuditEvent({
+        action: 'settings_updated',
+        targetType: 'configuration',
+        metadata: { keys: Object.keys(configs) }
+      });
       toast.success('Settings saved successfully! 🚀');
     } catch (error: any) {
       console.error('Save error:', error);

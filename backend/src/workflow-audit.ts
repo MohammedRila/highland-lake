@@ -20,8 +20,12 @@ async function runAudit() {
         await logConversation(lead.id, 'inbound', incomingMsg);
         console.log(`✅ Inbound Message Logged: "${incomingMsg}"`);
 
-        const aiReply = await generateReply([], incomingMsg);
+        const aiResult = await generateReply([], incomingMsg);
+        const aiReply = aiResult.reply;
         console.log(`✅ AI Response Generated: "${aiReply.substring(0, 50)}..."`);
+        if (aiResult.requiresManualReview) {
+            console.log(`⚠️ AI guardrail flagged for manual review: ${aiResult.reasons.join('; ')}`);
+        }
         
         await logConversation(lead.id, 'outbound', aiReply);
         console.log(`✅ Outbound Message Logged.\n`);

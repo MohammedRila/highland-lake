@@ -1,7 +1,16 @@
 import { Request, Response } from 'express';
 import asyncHandler from 'express-async-handler';
 import twilio from 'twilio';
-import { getOrCreateLead, logConversation, getRecentConversations, updateLeadLastContact } from '../services/db';
+import crypto from 'crypto';
+import {
+    getOrCreateLead,
+    logConversation,
+    getRecentConversations,
+    updateLeadLastContact,
+    reserveWebhookEvent,
+    markWebhookEventProcessed,
+    logAuditEvent
+} from '../services/db';
 import { generateReply, ConversationMessage } from '../services/ai';
 import { sendSms } from '../services/sms';
 
@@ -40,7 +49,7 @@ const isValidTwilioRequest = (req: Request): boolean => {
     return twilio.validateRequest(twilioAuthToken, signature, fullUrl, req.body);
 };
 
-const processIncomingSms = async (customerPhone: string, incomingText: string) => {
+const processIncomingSms = async (customerPhone: string, incomingText: string, webhookEventId: string) => {
     const lead = await getOrCreateLead(customerPhone, 'sms');
     await logConversation(lead.id, 'inbound', incomingText);
 
@@ -54,20 +63,43 @@ const processIncomingSms = async (customerPhone: string, incomingText: string) =
 
     if (lead.ai_enabled !== false) {
         console.log(`[Twilio SMS] Generating AI reply for ${customerPhone}...`);
-        const aiReply = await generateReply(history, incomingText);
+        const aiResult = await generateReply(history, incomingText);
+        const aiReply = aiResult.reply;
         console.log(`[Twilio SMS] AI generated reply: "${aiReply.substring(0, 50)}..."`);
 
-        await sendSms(customerPhone, aiReply);
-        await logConversation(lead.id, 'outbound', aiReply);
+        if (aiResult.requiresManualReview) {
+            await logConversation(lead.id, 'outbound', `[Manual Review Required] ${aiReply}`);
+            await logAuditEvent({
+                actor_type: 'system',
+                action: 'ai_manual_review_required',
+                target_type: 'lead',
+                target_id: lead.id,
+                metadata: {
+                    reasons: aiResult.reasons,
+                    webhook_event_id: webhookEventId,
+                    proposed_reply: aiReply
+                }
+            });
+        } else {
+            await sendSms(customerPhone, aiReply);
+            await logConversation(lead.id, 'outbound', aiReply);
+        }
     } else {
         console.log(`[Twilio SMS] AI is DISABLED for lead ${lead.id}. Skipping automatic response.`);
     }
 
     await updateLeadLastContact(lead.id);
+    await logAuditEvent({
+        actor_type: 'system',
+        action: 'webhook_processed',
+        target_type: 'lead',
+        target_id: lead.id,
+        metadata: { source: 'twilio_sms', webhook_event_id: webhookEventId }
+    });
     console.log(`[Twilio SMS] Flow complete for ${customerPhone}`);
 };
 
-const processMissedCall = async (customerPhone: string) => {
+const processMissedCall = async (customerPhone: string, webhookEventId: string) => {
     const lead = await getOrCreateLead(customerPhone, 'missed_call');
     await logConversation(lead.id, 'inbound', '[Missed Call]');
 
@@ -75,6 +107,13 @@ const processMissedCall = async (customerPhone: string) => {
     await sendSms(customerPhone, missedCallReply);
     await logConversation(lead.id, 'outbound', missedCallReply);
     await updateLeadLastContact(lead.id);
+    await logAuditEvent({
+        actor_type: 'system',
+        action: 'webhook_processed',
+        target_type: 'lead',
+        target_id: lead.id,
+        metadata: { source: 'twilio_missed_call', webhook_event_id: webhookEventId }
+    });
 };
 
 export const handleIncomingSms = asyncHandler(async (req: Request, res: Response) => {
@@ -94,9 +133,27 @@ export const handleIncomingSms = asyncHandler(async (req: Request, res: Response
 
     const customerPhone = String(From);
     const incomingText = String(Body).trim();
+    const webhookEventId =
+        String(req.body.MessageSid || req.body.SmsSid || req.body.MessageSid || req.headers['i-twilio-idempotency-token'] || '').trim();
+    if (!webhookEventId) {
+        res.status(400).send('Missing Twilio event id');
+        return;
+    }
+
+    const reserved = await reserveWebhookEvent('twilio_sms', webhookEventId, { from: customerPhone });
+    if (!reserved) {
+        console.log(`[Twilio SMS] Duplicate event ignored: ${webhookEventId}`);
+        res.status(200).send('<Response></Response>');
+        return;
+    }
     res.status(200).send('<Response></Response>');
 
-    void processIncomingSms(customerPhone, incomingText).catch((error) => {
+    void processIncomingSms(customerPhone, incomingText, webhookEventId)
+        .then(async () => {
+            await markWebhookEventProcessed('twilio_sms', webhookEventId, 'processed', { phone: customerPhone });
+        })
+        .catch(async (error) => {
+        await markWebhookEventProcessed('twilio_sms', webhookEventId, 'failed', { phone: customerPhone }, error instanceof Error ? error.message : String(error));
         console.error(`[Twilio SMS] Async processing failed for ${customerPhone}:`, error);
     });
 });
@@ -117,9 +174,27 @@ export const handleMissedCall = asyncHandler(async (req: Request, res: Response)
     }
 
     const customerPhone = String(From);
+    const webhookEventId =
+        String(req.body.CallSid || req.headers['i-twilio-idempotency-token'] || '').trim();
+    if (!webhookEventId) {
+        res.status(400).send('Missing Twilio event id');
+        return;
+    }
+
+    const reserved = await reserveWebhookEvent('twilio_missed_call', webhookEventId, { from: customerPhone });
+    if (!reserved) {
+        console.log(`[Twilio Call] Duplicate event ignored: ${webhookEventId}`);
+        res.status(200).send('<Response></Response>');
+        return;
+    }
     res.status(200).send('<Response></Response>');
 
-    void processMissedCall(customerPhone).catch((error) => {
+    void processMissedCall(customerPhone, webhookEventId)
+        .then(async () => {
+            await markWebhookEventProcessed('twilio_missed_call', webhookEventId, 'processed', { phone: customerPhone });
+        })
+        .catch(async (error) => {
+        await markWebhookEventProcessed('twilio_missed_call', webhookEventId, 'failed', { phone: customerPhone }, error instanceof Error ? error.message : String(error));
         console.error(`[Twilio Call] Async processing failed for ${customerPhone}:`, error);
     });
 });
@@ -152,12 +227,25 @@ export const handleMobileSms = asyncHandler(async (req: Request, res: Response) 
     // Making it robust to different mobile app payload formats (Tasker, AutoWeb, IFTTT, MacroDroid, etc.)
     const from = req.body.From || req.body.from || req.body.phone || req.body.sender || req.body.address;
     const body = req.body.Body || req.body.body || req.body.message || req.body.text || req.body.msg || req.body.content;
+    const mobileEventId = String(req.headers['x-webhook-id'] || req.body.event_id || '').trim();
+    const fallbackEventId = crypto
+        .createHash('sha256')
+        .update(`${from}|${body}|${new Date().toISOString().slice(0, 16)}`)
+        .digest('hex');
+    const webhookEventId = mobileEventId || `mobile-${fallbackEventId}`;
 
     console.log(`[Mobile Hook] Incoming payload:`, JSON.stringify(req.body));
 
     if (!from || !body) {
         console.warn('[Mobile Hook] Missing sender or message body in request');
         res.status(400).json({ error: 'Missing from/body/message in request' });
+        return;
+    }
+
+    const reserved = await reserveWebhookEvent('mobile_sms', webhookEventId, { from: String(from) });
+    if (!reserved) {
+        console.log(`[Mobile Hook] Duplicate event ignored: ${webhookEventId}`);
+        res.status(200).json({ reply: 'Already processed' });
         return;
     }
 
@@ -175,11 +263,36 @@ export const handleMobileSms = asyncHandler(async (req: Request, res: Response) 
     let reply = "Got it. Let me check on that for you.";
     
     if (lead.ai_enabled !== false) {
-        reply = await generateReply(history, body);
-        await logConversation(lead.id, 'outbound', reply);
+        const aiResult = await generateReply(history, body);
+        if (aiResult.requiresManualReview) {
+            reply = 'Thanks for the message. We received it and will reply shortly.';
+            await logConversation(lead.id, 'outbound', `[Manual Review Required] ${aiResult.reply}`);
+            await logAuditEvent({
+                actor_type: 'system',
+                action: 'ai_manual_review_required',
+                target_type: 'lead',
+                target_id: lead.id,
+                metadata: {
+                    reasons: aiResult.reasons,
+                    webhook_event_id: webhookEventId,
+                    proposed_reply: aiResult.reply
+                }
+            });
+        } else {
+            reply = aiResult.reply;
+            await logConversation(lead.id, 'outbound', reply);
+        }
     }
 
     await updateLeadLastContact(lead.id);
+    await markWebhookEventProcessed('mobile_sms', webhookEventId, 'processed', { from });
+    await logAuditEvent({
+        actor_type: 'system',
+        action: 'webhook_processed',
+        target_type: 'lead',
+        target_id: lead.id,
+        metadata: { source: 'mobile_sms', webhook_event_id: webhookEventId }
+    });
 
     res.status(200).json({ reply });
 });

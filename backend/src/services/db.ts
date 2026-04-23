@@ -28,6 +28,15 @@ export interface Conversation {
     read: boolean;
 }
 
+export interface AuditLogEvent {
+    actor_id?: string;
+    actor_type?: string;
+    action: string;
+    target_type: string;
+    target_id?: string;
+    metadata?: Record<string, unknown>;
+}
+
 export const getOrCreateLead = async (phone: string, source: string = 'sms'): Promise<Lead> => {
     // Check if lead exists
     const { data: existingLeads, error: fetchError } = await supabase
@@ -113,4 +122,86 @@ export const getConfigurations = async (): Promise<Record<string, string>> => {
         config[item.key] = item.value;
     });
     return config;
+};
+
+export const logAuditEvent = async (event: AuditLogEvent) => {
+    const payload = {
+        actor_id: event.actor_id || null,
+        actor_type: event.actor_type || 'system',
+        action: event.action,
+        target_type: event.target_type,
+        target_id: event.target_id || null,
+        metadata: event.metadata || {},
+    };
+
+    const { error } = await supabase
+        .from('audit_logs')
+        .insert([payload]);
+
+    if (error) {
+        console.error('Error writing audit log:', error);
+    }
+};
+
+export const isWebhookEventDuplicate = async (provider: string, eventId: string): Promise<boolean> => {
+    const { data, error } = await supabase
+        .from('webhook_events')
+        .select('id')
+        .eq('provider', provider)
+        .eq('event_id', eventId)
+        .maybeSingle();
+
+    if (error) {
+        console.error('Error checking webhook event dedupe:', error);
+        return false;
+    }
+
+    return Boolean(data);
+};
+
+export const reserveWebhookEvent = async (
+    provider: string,
+    eventId: string,
+    payload?: Record<string, unknown>
+): Promise<boolean> => {
+    const { error } = await supabase
+        .from('webhook_events')
+        .insert([{
+            provider,
+            event_id: eventId,
+            status: 'processing',
+            payload: payload || {},
+        }]);
+
+    if (!error) return true;
+
+    if ((error as { code?: string }).code === '23505') {
+        return false;
+    }
+
+    console.error('Error reserving webhook event:', error);
+    return false;
+};
+
+export const markWebhookEventProcessed = async (
+    provider: string,
+    eventId: string,
+    status: 'processing' | 'processed' | 'failed',
+    payload?: Record<string, unknown>,
+    errorMessage?: string
+) => {
+    const { error } = await supabase
+        .from('webhook_events')
+        .upsert([{
+            provider,
+            event_id: eventId,
+            status,
+            payload: payload || {},
+            processed_at: status === 'processed' ? new Date().toISOString() : null,
+            error_message: errorMessage || null,
+        }], { onConflict: 'provider,event_id' });
+
+    if (error) {
+        console.error('Error marking webhook event status:', error);
+    }
 };

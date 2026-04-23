@@ -40,7 +40,58 @@ export interface ConversationMessage {
     content: string;
 }
 
-export const generateReply = async (history: ConversationMessage[], newMessage: string): Promise<string> => {
+export interface AIReplyResult {
+    reply: string;
+    requiresManualReview: boolean;
+    reasons: string[];
+}
+
+const GUARDED_KEYWORDS = [
+    'guarantee',
+    'guaranteed',
+    '100%',
+    'always',
+    'never',
+    'free ceramic coating',
+    'free full detail',
+    'lifetime warranty',
+    'exact price',
+    'final price',
+];
+
+const UNCERTAIN_PATTERNS = [
+    /i (am|\'m) not sure/i,
+    /i don\'t know/i,
+    /can\'t confirm/i,
+    /maybe/i,
+    /possibly/i,
+    /might be/i,
+];
+
+const runGuardrails = (reply: string): { requiresManualReview: boolean; reasons: string[] } => {
+    const reasons: string[] = [];
+    const lowerReply = reply.toLowerCase();
+
+    for (const keyword of GUARDED_KEYWORDS) {
+        if (lowerReply.includes(keyword)) {
+            reasons.push(`Potential over-promise detected: "${keyword}"`);
+        }
+    }
+
+    for (const pattern of UNCERTAIN_PATTERNS) {
+        if (pattern.test(reply)) {
+            reasons.push('Model uncertainty detected in response');
+            break;
+        }
+    }
+
+    return {
+        requiresManualReview: reasons.length > 0,
+        reasons,
+    };
+};
+
+export const generateReply = async (history: ConversationMessage[], newMessage: string): Promise<AIReplyResult> => {
     try {
         const config = await getConfigurations();
         const dynamicPrompt = buildSystemPrompt(config);
@@ -67,7 +118,14 @@ export const generateReply = async (history: ConversationMessage[], newMessage: 
             temperature: 0.7,
         });
 
-        return completion.choices[0]?.message?.content || "Sorry, I'm having trouble processing that right now. Could you hold on a moment?";
+        const rawReply = completion.choices[0]?.message?.content || "Sorry, I'm having trouble processing that right now. Could you hold on a moment?";
+        const guardrailResult = runGuardrails(rawReply);
+
+        return {
+            reply: rawReply,
+            requiresManualReview: guardrailResult.requiresManualReview,
+            reasons: guardrailResult.reasons,
+        };
     } catch (error) {
         console.error('Error calling Groq API:', error);
         throw error;

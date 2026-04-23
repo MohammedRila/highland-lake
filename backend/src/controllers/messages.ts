@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
 import asyncHandler from 'express-async-handler';
-import { supabase, logConversation, Lead } from '../services/db';
+import { supabase, logConversation, Lead, logAuditEvent } from '../services/db';
 import { sendSms } from '../services/sms';
+
+const headerValue = (value: string | string[] | undefined): string | undefined =>
+    Array.isArray(value) ? value[0] : value;
 
 export const manualSendSms = asyncHandler(async (req: Request, res: Response) => {
     const { leadId, message } = req.body;
@@ -43,6 +46,17 @@ export const manualSendSms = asyncHandler(async (req: Request, res: Response) =>
 
         // 4. Log it in the conversation history
         await logConversation(lead.id, 'outbound', message);
+        await logAuditEvent({
+            actor_id: headerValue(req.headers['x-actor-id']),
+            actor_type: 'user',
+            action: 'manual_sms_sent',
+            target_type: 'lead',
+            target_id: lead.id,
+            metadata: {
+                phone: lead.phone,
+                message_preview: message.slice(0, 120)
+            }
+        });
 
         res.status(200).json({ success: true });
     } catch (error: any) {

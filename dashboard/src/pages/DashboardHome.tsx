@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { Users, CalendarCheck, TrendingUp, CheckCircle, Clock, Download, Upload } from 'lucide-react';
@@ -36,6 +37,7 @@ const PIPELINE_STAGES = [
 ] as const;
 
 export default function DashboardHome() {
+  const navigate = useNavigate();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -44,6 +46,7 @@ export default function DashboardHome() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : 'Unknown error';
 
   useEffect(() => {
     fetchLeads();
@@ -58,8 +61,8 @@ export default function DashboardHome() {
       
       if (error) throw error;
       if (data) setLeads(data);
-    } catch (error: any) {
-      toast.error('Failed to fetch leads: ' + error.message);
+    } catch (error: unknown) {
+      toast.error('Failed to fetch leads: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -228,8 +231,8 @@ export default function DashboardHome() {
       });
       toast.success('Job marked complete! Automation triggered.', { id: toastId });
       fetchLeads();
-    } catch (error: any) {
-      toast.error('Failed to update job: ' + error.message, { id: toastId });
+    } catch (error: unknown) {
+      toast.error('Failed to update job: ' + getErrorMessage(error), { id: toastId });
     }
   };
 
@@ -409,7 +412,19 @@ export default function DashboardHome() {
           ) : (
             <ul className="divide-y divide-[#333]">
               {filteredLeads.map((lead) => (
-                <li key={lead.id} className="px-4 md:px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-[#222] transition-colors">
+                <li
+                  key={lead.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/inbox/${lead.id}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigate(`/inbox/${lead.id}`);
+                    }
+                  }}
+                  className="px-4 md:px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-[#222] transition-colors cursor-pointer"
+                >
                   <div className="flex flex-col min-w-0">
                     <span className="text-white font-medium">{lead.name || 'Unknown Name'}</span>
                     <span className="text-gray-400 text-sm">{lead.phone}</span>
@@ -430,7 +445,10 @@ export default function DashboardHome() {
                     {/* Action */}
                     {lead.status !== 'complete' && (
                       <button 
-                        onClick={() => markJobComplete(lead.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void markJobComplete(lead.id);
+                        }}
                         title="Mark Complete (Triggers Review)"
                         className="px-3 py-2 min-h-11 rounded-lg border border-[#444] text-gray-300 hover:text-green-400 hover:border-green-700 transition-colors"
                       >

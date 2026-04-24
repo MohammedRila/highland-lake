@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, NavLink } from 'react-router-dom';
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import { LayoutDashboard, MessageSquare, Settings as SettingsIcon, LogOut, Loader2, Menu, X } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
@@ -9,7 +10,7 @@ import Inbox from './pages/Inbox';
 import Settings from './pages/Settings';
 
 const App = () => {
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 

@@ -10,6 +10,7 @@ interface Conversation {
   direction: 'inbound' | 'outbound';
   message: string;
   sent_at: string;
+  read?: boolean;
 }
 
 interface Lead {
@@ -26,6 +27,7 @@ export default function Inbox() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [replyText, setReplyText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : 'Unknown error';
 
   useEffect(() => {
     fetchLeads();
@@ -61,9 +63,28 @@ export default function Inbox() {
         .order('sent_at', { ascending: true });
       
       if (error) throw error;
-      if (data) setConversations(data);
-    } catch (error: any) {
-      toast.error('Failed to load messages: ' + error.message);
+      if (data) {
+        setConversations(data);
+
+        const unreadInboundIds = data
+          .filter((msg) => msg.direction === 'inbound' && msg.read === false)
+          .map((msg) => msg.id);
+
+        if (unreadInboundIds.length > 0) {
+          const { error: markReadError } = await supabase
+            .from('conversations')
+            .update({ read: true })
+            .in('id', unreadInboundIds);
+
+          if (markReadError) throw markReadError;
+
+          setConversations((prev) =>
+            prev.map((msg) => (unreadInboundIds.includes(msg.id) ? { ...msg, read: true } : msg))
+          );
+        }
+      }
+    } catch (error: unknown) {
+      toast.error('Failed to load messages: ' + getErrorMessage(error));
     }
   };
 
@@ -87,7 +108,8 @@ export default function Inbox() {
 
       if (!response.ok) {
         const errData = await response.json();
-        throw new Error(errData.error || 'Failed to send message');
+        const message = [errData.error, errData.details].filter(Boolean).join(': ');
+        throw new Error(message || 'Failed to send message');
       }
 
       setConversations([...conversations, {
@@ -99,9 +121,9 @@ export default function Inbox() {
       setReplyText('');
       toast.success('Message delivered! 📱', { id: toastId });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Send error:', error);
-      toast.error(error.message, { id: toastId });
+      toast.error(getErrorMessage(error), { id: toastId });
     }
   };
 
@@ -127,12 +149,13 @@ export default function Inbox() {
         metadata: { ai_enabled: newState }
       });
       toast.success(`AI assistant is now ${newState ? 'ENABLED' : 'DISABLED'} for this lead`, { id: toastId });
-    } catch (error: any) {
-      toast.error('Failed to update AI status: ' + error.message, { id: toastId });
+    } catch (error: unknown) {
+      toast.error('Failed to update AI status: ' + getErrorMessage(error), { id: toastId });
     }
   };
 
   const selectedLead = leads.find(l => l.id === leadId);
+  const lastMessage = conversations.length > 0 ? conversations[conversations.length - 1] : null;
 
   return (
     <div className="flex h-full min-h-0 relative">
@@ -207,6 +230,26 @@ export default function Inbox() {
               </div>
             </div>
 
+            <div className="px-3 md:px-4 py-2.5 border-b border-[#2a2a2a] bg-[#161616] text-xs text-gray-300">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span>
+                  <span className="text-gray-500">Lead:</span> {selectedLead.name || selectedLead.phone}
+                </span>
+                <span>
+                  <span className="text-gray-500">Phone:</span> {selectedLead.phone}
+                </span>
+                <span>
+                  <span className="text-gray-500">Messages:</span> {conversations.length}
+                </span>
+                {lastMessage && (
+                  <span>
+                    <span className="text-gray-500">Last activity:</span>{' '}
+                    {new Date(lastMessage.sent_at).toLocaleString()}
+                  </span>
+                )}
+              </div>
+            </div>
+
             <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 md:space-y-6">
               {conversations.map((msg) => (
                 <div key={msg.id} className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
@@ -215,9 +258,18 @@ export default function Inbox() {
                       {msg.direction === 'outbound' ? <Bot size={14} /> : <UserIcon size={14} />}
                     </div>
                     <div className={`px-3 md:px-4 py-2.5 rounded-2xl ${msg.direction === 'outbound' ? 'bg-gold-500 text-black rounded-br-none' : 'bg-[#222] text-white rounded-bl-none border border-[#333]'}`}>
+                      <p className={`text-[10px] uppercase tracking-wide mb-1 ${msg.direction === 'outbound' ? 'text-black/70' : 'text-gray-400'}`}>
+                        {msg.direction === 'outbound' ? 'You' : 'Lead'}
+                      </p>
                       <p className="whitespace-pre-wrap text-sm md:text-base leading-relaxed">{msg.message}</p>
                       <span className={`text-[10px] mt-1 block opacity-70 ${msg.direction === 'outbound' ? 'text-black' : 'text-gray-400'}`}>
-                        {new Date(msg.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(msg.sent_at).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                        {msg.direction === 'inbound' && msg.read === false ? ' • Unread' : ''}
                       </span>
                     </div>
                   </div>

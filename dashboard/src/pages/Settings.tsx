@@ -13,6 +13,7 @@ export default function Settings() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : 'Unknown error';
 
   useEffect(() => {
     fetchConfigs();
@@ -34,8 +35,8 @@ export default function Settings() {
         });
         setConfigs(prev => ({ ...prev, ...configMap }));
       }
-    } catch (error: any) {
-      toast.error('Failed to load settings: ' + error.message);
+    } catch (error: unknown) {
+      toast.error('Failed to load settings: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -61,9 +62,9 @@ export default function Settings() {
         metadata: { keys: Object.keys(configs) }
       });
       toast.success('Settings saved successfully! 🚀');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Save error:', error);
-      toast.error('Failed to save settings: ' + error.message);
+      toast.error('Failed to save settings: ' + getErrorMessage(error));
     } finally {
       setSaving(false);
     }

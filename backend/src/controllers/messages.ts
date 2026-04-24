@@ -6,6 +6,32 @@ import { sendSms } from '../services/sms';
 const headerValue = (value: string | string[] | undefined): string | undefined =>
     Array.isArray(value) ? value[0] : value;
 
+const formatCentralTimestamp = (date: Date): string => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Chicago',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    }).formatToParts(date);
+
+    const value = (type: Intl.DateTimeFormatPartTypes) =>
+        parts.find((part) => part.type === type)?.value || '';
+
+    return `${value('weekday')}, ${value('month')} ${value('day')}, ${value('year')} at ${value('hour')}:${value('minute')} ${value('dayPeriod')} CT`;
+};
+
+const withSentTimestamp = (message: string): string =>
+    `${message.trim()}\n\nSent: ${formatCentralTimestamp(new Date())}`;
+
+const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) return error.message;
+    return 'Unknown error';
+};
+
 export const manualSendSms = asyncHandler(async (req: Request, res: Response) => {
     const { leadId, message } = req.body;
 
@@ -41,11 +67,12 @@ export const manualSendSms = asyncHandler(async (req: Request, res: Response) =>
 
     // 3. Send the SMS via Twilio for Business-source leads
     try {
-        console.log(`[Manual SMS] Sending to ${lead.phone}: "${message.substring(0, 50)}..."`);
-        await sendSms(lead.phone, message);
+        const messageWithTimestamp = withSentTimestamp(message);
+        console.log(`[Manual SMS] Sending to ${lead.phone}: "${messageWithTimestamp.substring(0, 50)}..."`);
+        await sendSms(lead.phone, messageWithTimestamp);
 
         // 4. Log it in the conversation history
-        await logConversation(lead.id, 'outbound', message);
+        await logConversation(lead.id, 'outbound', messageWithTimestamp);
         await logAuditEvent({
             actor_id: headerValue(req.headers['x-actor-id']),
             actor_type: 'user',
@@ -54,17 +81,17 @@ export const manualSendSms = asyncHandler(async (req: Request, res: Response) =>
             target_id: lead.id,
             metadata: {
                 phone: lead.phone,
-                message_preview: message.slice(0, 120)
+                message_preview: messageWithTimestamp.slice(0, 120)
             }
         });
 
         res.status(200).json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[Manual SMS] Failed to send:', error);
         res.status(500).json({ 
             success: false, 
-            error: error.message,
-            details: 'Ensure your Twilio keys in Render are correct.'
+            error: 'Message delivery failed',
+            details: getErrorMessage(error)
         });
     }
 });

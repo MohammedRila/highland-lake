@@ -91,6 +91,30 @@ const runGuardrails = (reply: string): { requiresManualReview: boolean; reasons:
     };
 };
 
+const formatCentralTimestamp = (date: Date): string => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Chicago',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    }).formatToParts(date);
+
+    const value = (type: Intl.DateTimeFormatPartTypes) =>
+        parts.find((part) => part.type === type)?.value || '';
+
+    return `${value('weekday')}, ${value('month')} ${value('day')}, ${value('year')} at ${value('hour')}:${value('minute')} ${value('dayPeriod')} CT`;
+};
+
+const withSentTimestamp = (reply: string): string => {
+    const trimmedReply = reply.trim();
+    const timestamp = formatCentralTimestamp(new Date());
+    return `${trimmedReply}\n\nSent: ${timestamp}`;
+};
+
 export const generateReply = async (history: ConversationMessage[], newMessage: string): Promise<AIReplyResult> => {
     try {
         const config = await getConfigurations();
@@ -122,7 +146,7 @@ export const generateReply = async (history: ConversationMessage[], newMessage: 
         const guardrailResult = runGuardrails(rawReply);
 
         return {
-            reply: rawReply,
+            reply: withSentTimestamp(rawReply),
             requiresManualReview: guardrailResult.requiresManualReview,
             reasons: guardrailResult.reasons,
         };

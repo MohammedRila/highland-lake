@@ -7,6 +7,7 @@ import {
     logConversation,
     getRecentConversations,
     updateLeadLastContact,
+    updateLeadName,
     reserveWebhookEvent,
     markWebhookEventProcessed,
     logAuditEvent
@@ -49,9 +50,50 @@ const isValidTwilioRequest = (req: Request): boolean => {
     return twilio.validateRequest(twilioAuthToken, signature, fullUrl, req.body);
 };
 
+const extractLeadNameFromMessage = (message: string): string | null => {
+    const normalized = message.trim().replace(/\s+/g, ' ');
+    if (!normalized) return null;
+
+    const patterns: RegExp[] = [
+        /\b(?:my name is|i am|i'm|this is)\s+([a-z][a-z'\-]+(?:\s+[a-z][a-z'\-]+){0,2})\b/i,
+        /^([a-z][a-z'\-]+(?:\s+[a-z][a-z'\-]+){0,2})$/i
+    ];
+
+    for (const pattern of patterns) {
+        const match = normalized.match(pattern);
+        if (!match?.[1]) continue;
+        const candidate = match[1].trim();
+        const invalid = /^(interested|looking|need|quote|detail|stage|ceramic|paint|window|tint|yes|no|okay|ok)$/i;
+        if (invalid.test(candidate)) continue;
+
+        // Convert to title case for consistent display.
+        return candidate
+            .split(' ')
+            .filter(Boolean)
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+            .join(' ');
+    }
+
+    return null;
+};
+
 const processIncomingSms = async (customerPhone: string, incomingText: string, webhookEventId: string) => {
     const lead = await getOrCreateLead(customerPhone, 'sms');
     await logConversation(lead.id, 'inbound', incomingText);
+
+    if (!lead.name) {
+        const extractedName = extractLeadNameFromMessage(incomingText);
+        if (extractedName) {
+            await updateLeadName(lead.id, extractedName);
+            await logAuditEvent({
+                actor_type: 'system',
+                action: 'lead_name_detected_from_message',
+                target_type: 'lead',
+                target_id: lead.id,
+                metadata: { detected_name: extractedName, source: 'twilio_sms' }
+            });
+        }
+    }
 
     const recentConvos = await getRecentConversations(lead.id, 10);
     const history: ConversationMessage[] = recentConvos
@@ -113,6 +155,23 @@ const processMissedCall = async (customerPhone: string, webhookEventId: string) 
         target_type: 'lead',
         target_id: lead.id,
         metadata: { source: 'twilio_missed_call', webhook_event_id: webhookEventId }
+    });
+};
+
+const processIncomingCallAutoText = async (customerPhone: string, webhookEventId: string) => {
+    const lead = await getOrCreateLead(customerPhone, 'missed_call');
+    await logConversation(lead.id, 'inbound', '[Incoming Call]');
+
+    const autoReply = "Hey! Thanks for calling Highland Lake Customs. We couldn't answer the phone right now, but we're here to help. Text us what service you need and we will get you taken care of.";
+    await sendSms(customerPhone, autoReply);
+    await logConversation(lead.id, 'outbound', autoReply);
+    await updateLeadLastContact(lead.id);
+    await logAuditEvent({
+        actor_type: 'system',
+        action: 'webhook_processed',
+        target_type: 'lead',
+        target_id: lead.id,
+        metadata: { source: 'twilio_voice_call', webhook_event_id: webhookEventId }
     });
 };
 
@@ -199,6 +258,50 @@ export const handleMissedCall = asyncHandler(async (req: Request, res: Response)
     });
 });
 
+export const handleIncomingCall = asyncHandler(async (req: Request, res: Response) => {
+    if (!isValidTwilioRequest(req)) {
+        res.status(401).send('Invalid Twilio signature');
+        return;
+    }
+
+    const { From, CallSid } = req.body;
+    console.log(`[Twilio Voice] Received incoming call from ${From}. CallSid: ${CallSid}`);
+
+    if (!From) {
+        res.status(400).send('Missing From in incoming call webhook');
+        return;
+    }
+
+    const customerPhone = String(From);
+    const webhookEventId =
+        String(CallSid || req.headers['i-twilio-idempotency-token'] || '').trim();
+    if (!webhookEventId) {
+        res.status(400).send('Missing Twilio call event id');
+        return;
+    }
+
+    const reserved = await reserveWebhookEvent('twilio_voice_call', webhookEventId, { from: customerPhone });
+    // Twilio expects TwiML quickly on voice webhooks.
+    res
+        .status(200)
+        .type('text/xml')
+        .send('<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>');
+
+    if (!reserved) {
+        console.log(`[Twilio Voice] Duplicate event ignored: ${webhookEventId}`);
+        return;
+    }
+
+    void processIncomingCallAutoText(customerPhone, webhookEventId)
+        .then(async () => {
+            await markWebhookEventProcessed('twilio_voice_call', webhookEventId, 'processed', { phone: customerPhone });
+        })
+        .catch(async (error) => {
+            await markWebhookEventProcessed('twilio_voice_call', webhookEventId, 'failed', { phone: customerPhone }, error instanceof Error ? error.message : String(error));
+            console.error(`[Twilio Voice] Async processing failed for ${customerPhone}:`, error);
+        });
+});
+
 /**
  * Mobile Hook (For personal numbers WITHOUT Twilio)
  * This endpoint is called by an app on your phone (like Tasker).
@@ -251,6 +354,20 @@ export const handleMobileSms = asyncHandler(async (req: Request, res: Response) 
 
     const lead = await getOrCreateLead(from, 'mobile');
     await logConversation(lead.id, 'inbound', body);
+
+    if (!lead.name) {
+        const extractedName = extractLeadNameFromMessage(String(body));
+        if (extractedName) {
+            await updateLeadName(lead.id, extractedName);
+            await logAuditEvent({
+                actor_type: 'system',
+                action: 'lead_name_detected_from_message',
+                target_type: 'lead',
+                target_id: lead.id,
+                metadata: { detected_name: extractedName, source: 'mobile_sms' }
+            });
+        }
+    }
 
     const recentConvos = await getRecentConversations(lead.id, 10);
     const history: ConversationMessage[] = recentConvos

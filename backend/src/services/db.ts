@@ -107,6 +107,20 @@ export const updateLeadLastContact = async (leadId: string) => {
     }
 };
 
+export const updateLeadName = async (leadId: string, name: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+
+    const { error } = await supabase
+        .from('leads')
+        .update({ name: trimmedName })
+        .eq('id', leadId);
+
+    if (error) {
+        console.error('Error updating lead name:', error);
+    }
+};
+
 export const getConfigurations = async (): Promise<Record<string, string>> => {
     const { data, error } = await supabase
         .from('configurations')

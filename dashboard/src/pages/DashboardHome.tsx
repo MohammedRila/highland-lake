@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
-import { Users, CalendarCheck, TrendingUp, CheckCircle, Clock, Download, Upload } from 'lucide-react';
+import { Users, CalendarCheck, TrendingUp, CheckCircle, Clock, Download, Upload, MessageSquare } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { logAuditEvent } from '../lib/audit';
 
@@ -276,6 +276,16 @@ export default function DashboardHome() {
     return acc;
   }, {});
 
+  const openLeadMessages = (leadId: string, source: 'recent_leads' | 'pipeline_board') => {
+    void logAuditEvent({
+      action: 'lead_messages_opened_from_dashboard',
+      targetType: 'lead',
+      targetId: leadId,
+      metadata: { source }
+    });
+    navigate(`/inbox/${leadId}`);
+  };
+
   return (
     <div className="p-4 md:p-8">
       <h2 className="text-xl md:text-2xl font-bold text-white mb-4 md:mb-6">Overview</h2>
@@ -346,14 +356,38 @@ export default function DashboardHome() {
                     <p className="text-xs text-gray-500">No leads in this stage.</p>
                   ) : (
                     stageLeads.map((lead) => (
-                      <div key={lead.id} className="bg-[#222] border border-[#3a3a3a] rounded-lg p-3">
-                        <p className="text-sm font-medium text-white truncate">{lead.name || 'Unknown Name'}</p>
+                      <div
+                        key={lead.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openLeadMessages(lead.id, 'pipeline_board')}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            openLeadMessages(lead.id, 'pipeline_board');
+                          }
+                        }}
+                        className="bg-[#222] border border-[#3a3a3a] rounded-lg p-3 cursor-pointer hover:border-gold-700 transition-colors"
+                      >
+                        <p className="text-sm font-medium text-white truncate">{lead.name || lead.phone}</p>
                         <p className="text-xs text-gray-400 mt-0.5">{lead.phone}</p>
                         <div className="flex flex-wrap gap-2 mt-3">
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openLeadMessages(lead.id, 'pipeline_board');
+                            }}
+                            className="px-2.5 py-1.5 rounded-md border border-gold-700 text-[11px] text-gold-400 hover:border-gold-500 transition-colors"
+                          >
+                            Messages
+                          </button>
                           {PIPELINE_STAGES.filter((targetStage) => targetStage.key !== lead.status).slice(0, 3).map((targetStage) => (
                             <button
                               key={targetStage.key}
-                              onClick={() => updateLeadStatus(lead.id, targetStage.key)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void updateLeadStatus(lead.id, targetStage.key);
+                              }}
                               disabled={statusUpdatingId === lead.id}
                               className="px-2.5 py-1.5 rounded-md border border-[#555] text-[11px] text-gray-200 hover:border-gold-600 hover:text-gold-400 transition-colors disabled:opacity-50"
                             >
@@ -416,17 +450,17 @@ export default function DashboardHome() {
                   key={lead.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => navigate(`/inbox/${lead.id}`)}
+                  onClick={() => openLeadMessages(lead.id, 'recent_leads')}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
-                      navigate(`/inbox/${lead.id}`);
+                      openLeadMessages(lead.id, 'recent_leads');
                     }
                   }}
                   className="px-4 md:px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-[#222] transition-colors cursor-pointer"
                 >
                   <div className="flex flex-col min-w-0">
-                    <span className="text-white font-medium">{lead.name || 'Unknown Name'}</span>
+                    <span className="text-white font-medium">{lead.name || lead.phone}</span>
                     <span className="text-gray-400 text-sm">{lead.phone}</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:gap-4">
@@ -458,6 +492,19 @@ export default function DashboardHome() {
                         </span>
                       </button>
                     )}
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openLeadMessages(lead.id, 'recent_leads');
+                      }}
+                      title="Open lead messages"
+                      className="px-3 py-2 min-h-11 rounded-lg border border-gold-700 text-gold-400 hover:border-gold-500 transition-colors"
+                    >
+                      <span className="flex items-center gap-1.5 text-sm">
+                        <MessageSquare size={16} />
+                        Messages
+                      </span>
+                    </button>
                   </div>
                 </li>
               ))}
